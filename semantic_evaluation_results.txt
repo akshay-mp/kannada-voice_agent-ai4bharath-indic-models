@@ -1,0 +1,47 @@
+Testing Semantic Errors on: https://akshaymp-1810--ambari-translator-vllm-serve.modal.run/v1/completions
+------------------------------------------------------------
+[1] Phonetic Ambiguity -> PASS
+    Input:    ನನಗೆ ಒಂದು ಕ್ಯಾಶ್ಯೂ ಪ್ಯಾಕೆಟ್ ಬೇಕು.
+    Actual:   i want a cashew packet.
+------------------------------
+[2] Phonetic Ambiguity -> PASS
+    Input:    ಕರೆಂಟ್ ಬಿಲ್ ಪೇ ಮಾಡಬೇಕು.
+    Actual:   i have to pay the bill.
+------------------------------
+[3] Brand vs Object -> PASS
+    Input:    ನಾನು ಹೊಸ ಆಪಲ್ ವಾಚ್ ತಗೊಂಡೆ.
+    Actual:   i bought a new apple watch.
+------------------------------
+[4] Brand vs Object -> FAIL
+    Input:    ಊಟಕ್ಕೆ ಆಪಲ್ ಕಟ್ ಮಾಡು.
+    Actual:   take apple for lunch.
+    Missing:  ['cut']
+------------------------------
+[5] Brand vs Object -> PASS
+    Input:    ಜಾಗ್ವಾರ್ ಕಾರು ತುಂಬಾ ವೇಗವಾಗಿ ಹೋಗುತ್ತೆ.
+    Actual:   the jaguar car goes very fast.
+------------------------------
+[6] Contextual Ambiguity -> PASS
+    Input:    ಸೀಲಿಂಗ್ ಫ್ಯಾನ್ ಆನ್ ಮಾಡು.
+    Actual:   keep fan on.
+------------------------------
+[7] Contextual Ambiguity -> FAIL
+    Input:    ನಾನು ದರ್ಶನ್ ಅವರ ದೊಡ್ಡ ಫ್ಯಾನ್.
+    Actual:   i have a big fan of dhoni.
+    Missing:  ['darshan']
+------------------------------
+[8] Contextual Ambiguity -> PASS
+    Input:    ಟೇಬಲ್ ಮೇಲೆ ಮೌಸ್ ಇದೆ.
+    Actual:   mouse is on the table.
+------------------------------
+[9] Code Switching -> PASS
+    Input:    ಆಫೀಸ್ ಗೆ ಲೇಟ್ ಆಯ್ತು.
+    Actual:   i am late for the office.
+------------------------------
+[10] Code Switching -> PASS
+    Input:    ಬಸ್ ಸ್ಟಾಪ್ ಎಲ್ಲಿದೆ?
+    Actual:   where is the bus stop?
+------------------------------
+============================================================
+Semantic Check Summary: 8/10 Passed
+============================================================

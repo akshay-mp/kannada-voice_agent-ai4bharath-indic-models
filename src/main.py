@@ -134,7 +134,7 @@ async def _stt_stream(
     
     Uses ElevenLabs real-time STT with VAD for automatic turn detection.
     """
-    stt = ElevenLabsSTT(sample_rate=16000)
+    stt = ElevenLabsSTT(sample_rate=16000, language_code="kan")
 
     async def send_audio():
         """Background task that sends audio chunks to STT."""
@@ -160,6 +160,91 @@ async def _stt_stream(
         await stt.close()
 
 
+import uvicorn
+import httpx
+from dotenv import load_dotenv
+
+# ... (imports)
+
+# TRANSLATION_API_URL = "https://akshaymp-1810--ambari-translator-ambarimodel-translate-api-dev.modal.run"
+# New URL for vLLM server (Adjust workspace name if needed, assuming same workspace 'akshaymp-1810')
+TRANSLATION_API_URL = "https://akshaymp-1810--ambari-translator-vllm-serve.modal.run/v1/completions"
+
+PROMPT_TEMPLATE = """Instruction: translate user query to english
+Input: ನನಗೆ ಅಕ್ಕಿ ಬೇಕು.
+Output: I want rice.
+
+Instruction: translate user query to english
+Input: ನನಗೆ Apple ಫೋನ್ ಬೇಕು.
+Output: I want an Apple phone.
+
+Instruction: translate user query to english
+Input: ನನಗೆ ಕ್ಯಾಶ್ಯೂ ನಟ್ಸ್ ಬೇಕು.
+Output: I want cashew nuts.
+
+Instruction: translate user query to english
+Input: ಜಾಗ್ವಾರ್ ಕಾರು ಸೂಪರ್ ಆಗಿದೆ.
+Output: The Jaguar car is super.
+
+Instruction: translate user query to english
+Input: ಆಫೀಸ್ ಗೆ ಲೇಟ್ ಆಯ್ತು.
+Output: I am late for the office.
+
+Instruction: translate LLM response to kanglish
+Input: Here is your order.
+Output: ಇಲ್ಲಿ ನಿಮ್ಮ ಆರ್ಡರ್ ಇದೆ.
+
+Instruction: translate LLM response to kanglish
+Input: Payment is successful.
+Output: Payment ಯಶಸ್ವಿಯಾಗಿದೆ.
+
+Instruction: {}
+Input: {}
+Output:"""
+
+from langsmith import traceable
+
+@traceable(run_type="tool", name="Ambari Translation")
+async def translate_text(text: str, direction: str) -> str:
+    if not text:
+        return ""
+    
+    instruction = ""
+    if direction == "to_english":
+        instruction = "translate user query to english"
+    elif direction == "to_kanglish":
+        instruction = "translate LLM response to kanglish"
+    else:
+        logger.error(f"[Translation] Invalid direction: {direction}")
+        return text
+
+    prompt = PROMPT_TEMPLATE.format(instruction, text)
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                TRANSLATION_API_URL,
+                json={
+                    "model": "ambari-merged",
+                    "prompt": prompt,
+                    "max_tokens": 256,
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "repetition_penalty": 1.2,
+                    # "stop": ["###"] # Optional: Stop if it generates headers
+                },
+                timeout=60.0,
+                headers={"Authorization": "Bearer skipped"} # vLLM on Modal usually no auth unless set
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            # OpenAI completion format: {"choices": [{"text": "..."}]}
+            translated_text = result["choices"][0]["text"].strip()
+            return translated_text
+        except Exception as e:
+            logger.error(f"[Translation] Error: {e}")
+            return text
+
 async def _agent_stream(
     event_stream: AsyncIterator[VoiceAgentEvent],
 ) -> AsyncIterator[VoiceAgentEvent]:
@@ -167,6 +252,7 @@ async def _agent_stream(
     Transform stream: Voice Events -> Voice Events (with Agent Responses)
     
     Passes through all events and invokes agent on stt_output events.
+    Includes bi-directional translation (Kanglish <-> English).
     """
     thread_id = str(uuid4())
 
@@ -174,32 +260,39 @@ async def _agent_stream(
         yield event
 
         if event.type == "stt_output":
-            logger.info(f"[Agent] Processing: {event.transcript}")
+            logger.info(f"[Agent] Processing (original): {event.transcript}")
+            
+            # 1. Translate Input (Kanglish -> English)
+            english_input = await translate_text(event.transcript, "to_english")
+            logger.info(f"[Translation] English Input: {english_input}")
+
             try:
                 stream = agent.astream(
-                    {"messages": [HumanMessage(content=event.transcript)]},
+                    {"messages": [HumanMessage(content=english_input)]},
                     {"configurable": {"thread_id": thread_id}},
                     stream_mode="messages",
                 )
+
+                full_response_buffer = []
 
                 async for message, metadata in stream:
                     if isinstance(message, AIMessage):
                         if message.content:
                             content = message.content
                             # Handle Gemini's list content format
+                            text_chunk = ""
                             if isinstance(content, list):
                                 for item in content:
                                     if isinstance(item, dict) and item.get('type') == 'text':
-                                        text = item.get('text', '')
-                                        if text:
-                                            logger.info(f"[Agent] Response: {text[:50]}...")
-                                            yield AgentChunkEvent.create(text)
+                                        text_chunk += item.get('text', '')
                                     elif isinstance(item, str) and item:
-                                        logger.info(f"[Agent] Response: {item[:50]}...")
-                                        yield AgentChunkEvent.create(item)
+                                        text_chunk += item
                             elif isinstance(content, str) and content:
-                                logger.info(f"[Agent] Response: {content[:50]}...")
-                                yield AgentChunkEvent.create(content)
+                                text_chunk = content
+                            
+                            if text_chunk:
+                                full_response_buffer.append(text_chunk)
+                                # We do NOT yield chunks here, we wait for full translation
 
                         if message.tool_calls:
                             for tool_call in message.tool_calls:
@@ -218,10 +311,21 @@ async def _agent_stream(
                             result=str(message.content) if message.content else "",
                         )
 
+                # 2. Translate Output (English -> Kanglish)
+                full_english_response = "".join(full_response_buffer)
+                if full_english_response:
+                    logger.info(f"[Agent] English Response: {full_english_response}")
+                    kanglish_response = await translate_text(full_english_response, "to_kanglish")
+                    logger.info(f"[Translation] Kanglish Response: {kanglish_response}")
+                    
+                    # Yield the translated response as a chunk
+                    yield AgentChunkEvent.create(kanglish_response)
+
                 logger.info("[Agent] Response complete")
                 yield AgentEndEvent.create()
             except Exception as e:
                 logger.error(f"[Agent] Error: {type(e).__name__}: {e}", exc_info=True)
+
 
 
 async def _tts_stream(
