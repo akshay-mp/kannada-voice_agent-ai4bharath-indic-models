@@ -47,7 +47,7 @@ def test_generate_custom(ref_audio_path, ref_text):
         b64_audio = base64.b64encode(audio_bytes).decode('utf-8')
     
     payload = {
-        "text": "ಈ ಧ್ವನಿಯನ್ನು ಕಸ್ಟಮ್ ರೆಫರೆನ್ಸ್ ಆಡಿಯೋದಿಂದ ಕ್ಲೋನ್ ಮಾಡಲಾಗಿದೆ.",
+        "text": " ಮಂಜಿನ ಪರಿಸ್ಥಿತಿಗಳು ಮತ್ತು ಹೆಚ್ಚಿನ ತೇವಾಂಶದೊಂದಿಗೆ ಬೆಂಗಳೂರಿನ ಪ್ರಸ್ತುತ ತಾಪಮಾನವು ಸ ಸುಮಾರು 17 ಡಿಗ್ರಿ ಸೆಲ್ಸಿಯಸ",
         "ref_audio": b64_audio,
         "ref_text": ref_text
     }

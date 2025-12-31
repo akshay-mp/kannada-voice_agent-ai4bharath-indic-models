@@ -1,6 +1,12 @@
 # Kannada Voice Agent (Generic)
 
-A "Voice Sandwich" architecture for a Kannada Generic Voice Agent. This pipeline integrates Voice Activity Detection (VAD), Speech-to-Text (STT), Translation (Indic↔English), LLM Agent (Gemini), and Text-to-Speech (TTS).
+A "Voice Sandwich" architecture for a Kannada Generic Voice Agent. This pipeline integrates Voice Activity Detection (VAD), Speech-to-Text (STT), Translation (Indic↔English), LLM Agent (Qwen), and Text-to-Speech (TTS).
+
+## 💡 Motivation: Why this was created
+
+I tested several models and chat apps for Kannada and was not satisfied with either the pronunciation or translation quality. This led to the creation of an agent using **Indic Models**, which are specifically curated for the 22 languages of India.
+
+> **Note**: This pipeline is designed to be easily adaptable for all 22 official Indian languages with minor configuration changes. I encourage you to try adapting it for your own language!
 
 ## 🏗️ Architecture
 
@@ -9,17 +15,17 @@ The pipeline follows a **Voice Sandwich** pattern:
 1.  **VAD (Silero)**: Detects voice activity in the audio stream.
 2.  **STT (IndicConformer)**: Transcribes Kannada audio to Kannada text.
 3.  **Translation (IndicTrans2)**: Translates Kannada text to English.
-4.  **Agent (Gemini)**: Processes the English query and generates an English response.
+4.  **Agent (QWEN + Tavily)**: Processes the English query using QWEN Model from NEBIUS, augmented with **Tavily Search** for real-time information, and generates an English response.
 5.  **Translation (IndicTrans2)**: Translates the English response back to Kannada.
 6.  **TTS (IndicF5)**: Synthesizes Kannada audio from the translated text.
 
 ### Microservices (Modal)
 The heavy lifting (AI Models) is hosted on [Modal](https://modal.com/) as serverless microservices:
-- **STT**: `src/modal_indicconformer.py` (AI4Bharat IndicConformer)
+- **STT**: `src/modal/modal_indicconformer.py` (AI4Bharat IndicConformer)
 - **Translation**:
-    - `src/modal_indictrans2.py` (Indic → English)
-    - `src/modal_indictrans2_en_indic.py` (English → Indic)
-- **TTS**: `src/modal_indicf5.py` (IndicF5)
+    - `src/modal/modal_indictrans2.py` (Indic → English)
+    - `src/modal/modal_indictrans2_en_indic.py` (English → Indic)
+- **TTS**: `src/modal/modal_indicf5.py` (IndicF5)
 
 ## �️ Modal Skills (Pre-configured)
 This repository includes a `skills/` directory containing **standalone, reusable skills** for deploying each model to Modal. These can be used as references or starting points for isolated deployments:
@@ -33,7 +39,9 @@ This repository includes a `skills/` directory containing **standalone, reusable
 ### Prerequisites
 - [Modal](https://modal.com/) account and CLI installed (`pip install modal`).
 - [uv](https://github.com/astral-sh/uv) (recommended) or Python 3.10+.
-- `.env` file with `GOOGLE_API_KEY` (for Gemini) and `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET`.
+- `.env` file with:
+    - `NEBIUS_API_KEY` (for Qwen)
+    - `TAVILY_API_KEY` (for Search capabilities)
 
 ### Deploy Models to Modal
 Run the deployment script to deploy all microservices:
@@ -42,10 +50,10 @@ Run the deployment script to deploy all microservices:
 ```
 Or deploy individually:
 ```bash
-modal deploy src/modal_indicconformer.py
-modal deploy src/modal_indicf5.py
-modal deploy src/modal_indictrans2.py
-modal deploy src/modal_indictrans2_en_indic.py
+modal deploy src/modal/modal_indicconformer.py
+modal deploy src/modal/modal_indicf5.py
+modal deploy src/modal/modal_indictrans2.py
+modal deploy src/modal/modal_indictrans2_en_indic.py
 ```
 
 ### Cold Start (Warmup)
@@ -58,7 +66,7 @@ To ensure low latency, warm up the serverless containers before use:
 
 ### 1. Install Dependencies
 ```bash
-uv pip install -r requirements_voice_agent.txt
+uv pip install -r requirements.txt
 ```
 
 ### 2. Start the Server

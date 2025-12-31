@@ -3,21 +3,30 @@ export type ServerEvent =
   | { type: "user_input"; ts: number }
   | { type: "stt_chunk"; ts: number; transcript: string }
   | { type: "stt_output"; ts: number; transcript: string }
-  | { type: "agent_chunk"; ts: number; text: string }
+  | { type: "agent_chunk"; text: string; ts: number }
   | {
     type: "tool_call";
-    ts: number;
+    id: string;
     name: string;
-    args: Record<string, unknown>;
+    args: Record<string, any>;
+    ts: number;
   }
-  | { type: "tool_result"; ts: number; name: string; result: string }
+  | {
+    type: "tool_result";
+    tool_call_id: string;
+    name: string;
+    result: string;
+    ts: number;
+  }
+  | { type: "agent_end"; full_response: string; ts: number }
   | {
     type: "translation";
     ts: number;
     text: string;
     direction: "indic_to_en" | "en_to_indic";
   }
-  | { type: "tts_chunk"; audio: string; ts: number };
+  | { type: "tts_chunk"; audio_length: number; ts: number }
+  | { type: "tts_complete"; ts: number };
 
 // Session state
 export interface SessionState {

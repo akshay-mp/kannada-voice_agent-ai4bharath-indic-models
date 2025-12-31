@@ -11,3 +11,7 @@ pyaudio
 python-dotenv
 langchain-openai
 modal
+langchain
+langchain-community
+langchain-tavily
+langgraph

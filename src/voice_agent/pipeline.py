@@ -13,6 +13,7 @@ from .events import (
     AgentChunkEvent,
     AgentEndEvent,
     TTSChunkEvent,
+    TTSCompleteEvent,
 )
 from . import stt_client, translation_client, tts_client
 from .agent import run_agent_sync
@@ -200,6 +201,9 @@ async def tts_stream(
                 if audio_bytes:
                     yield TTSChunkEvent.create(audio=audio_bytes)
                     print(f"🔊 TTS: Generated {len(audio_bytes)} bytes")
+                
+                # Signal completion of TTS for this turn
+                yield TTSCompleteEvent.create()
             except Exception as e:
                 print(f"❌ TTS Error: {e}")
 

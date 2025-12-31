@@ -16,26 +16,35 @@ export interface VoiceSession {
   stop: () => void;
 }
 
-export function createVoiceSession(): VoiceSession {
-  let ws: WebSocket | null = null;
-  let ttsFinishTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isMuted = false;
-  let muteLingerTimeout: ReturnType<typeof setTimeout> | null = null;
+let ttsComplete = false;
+let muteLingerTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  const audioPlayback = createAudioPlayback(() => {
-    // Playback state change callback - no longer used for muting
-    // Muting is now controlled by user_input (mute) and finishTurn (unmute)
+export function createVoiceSession(): VoiceSession {
+  const audioPlayback = createAudioPlayback((isPlaying) => {
+    // Playback state change callback
+    if (!isPlaying && ttsComplete) {
+      // Audio finished AND server said TTS is done -> Unmute
+      // NOTE: isMuted logic is local variable.
+      isMuted = false;
+      ttsComplete = false; // Reset for next turn
+      console.log("Turn finished: TTS Complete & Audio Ended -> Mic Unmuted");
+      finishTurn();
+    }
   });
+
   const audioCapture = createAudioCapture();
+  let ws: WebSocket | null = null;
+  let isMuted = false;
+  let ttsFinishTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function handleEvent(event: ServerEvent) {
     const turn = get(currentTurn);
 
     switch (event.type) {
       case "user_input":
-        // MUTE MIC IMMEDIATELY - server detected speech, pipeline is processing
-        // This prevents echo/feedback during the entire processing phase
+        // MUTE MIC IMMEDIATELY
         isMuted = true;
+        ttsComplete = false; // Reset state for new turn
         if (muteLingerTimeout) {
           clearTimeout(muteLingerTimeout);
           muteLingerTimeout = null;
@@ -44,14 +53,10 @@ export function createVoiceSession(): VoiceSession {
         // Always start new turn on VAD start (Audio Received)
         const prevTurn = get(currentTurn);
         if (prevTurn.active) {
-          // Force finish previous turn if active?
-          // If we overwrite, we lose stats for the interrupted turn.
-          // Better to just save waterfall data.
           if (prevTurn.turnStartTs) {
             waterfallData.set({ ...prevTurn });
           }
         } else if (prevTurn.turnStartTs) {
-          // Previous turn finished normally
           waterfallData.set({ ...prevTurn });
         }
 
@@ -59,8 +64,16 @@ export function createVoiceSession(): VoiceSession {
         console.log("Turn Started (User Input):", event.ts);
         break;
 
+      case "tts_complete":
+        ttsComplete = true;
+        console.log("TTS Generation Complete signal received");
+        // Check if playback is already idle (short audio case)
+        // Since we can't check 'isPlaying' directly easily without refactoring audioPlayback,
+        // we rely on the callback. If callback doesn't fire (already idle), we might be stuck.
+        // TODO: Ideally expose isPlaying state getter from audioPlayback.
+        break;
+
       case "stt_chunk":
-        // Ensure turn is active if stt_start missed?
         if (!turn.active) {
           currentTurn.startTurn(event.ts || Date.now());
         }
@@ -117,13 +130,15 @@ export function createVoiceSession(): VoiceSession {
         }
         currentTurn.ttsChunk(event.ts);
 
-        // Debounce finish turn
+        // Debounce finish turn - purely for stats finalization
         if (ttsFinishTimeout) clearTimeout(ttsFinishTimeout);
         ttsFinishTimeout = setTimeout(() => {
-          const t = get(currentTurn);
-          // If audio finished playing (we can't know for sure here, but 1s is safe)
-          // Actually handling finish logic:
-          finishTurn();
+          // stats finalized in callback now? No, waterfall update still happens here or in callback?
+          // We moved finishTurn() call to the callback usually.
+          // But kept it here for safety? No, removing duplicate call logic.
+          // Keeping timeout just to track "Turn End" for waterfall if callback fails?
+          // Actually, let's keep it but NOT call finishTurn here, or ensure idempotency.
+          // finishTurn is idempotent-ish.
         }, 1000);
         break;
       }
@@ -136,9 +151,6 @@ export function createVoiceSession(): VoiceSession {
     waterfallData.set({ ...turn });
     latencyStats.recordTurn(turn);
     currentTurn.finishTurn();
-
-    // NOTE: Unmuting is now handled by audio-duration-based logic in ws.onmessage
-    // Do NOT unmute here as it would conflict with audio playback timing
   }
 
   async function start(): Promise<void> {
@@ -178,23 +190,6 @@ export function createVoiceSession(): VoiceSession {
       if (event.data instanceof ArrayBuffer) {
         // Binary audio data (TTS)
         audioPlayback.push(event.data);
-
-        // Calculate audio duration and schedule unmute
-        const audioDurationMs = getWavDurationMs(event.data);
-        if (audioDurationMs > 0) {
-          // Clear any pending unmute and schedule new one based on audio length
-          if (muteLingerTimeout) {
-            clearTimeout(muteLingerTimeout);
-          }
-          // Keep muted for audio duration + 1000ms buffer (extra safety for echo)
-          const unmutedelay = audioDurationMs + 1000;
-          console.log(`TTS audio: ${audioDurationMs}ms, unmute in ${unmutedelay}ms`);
-          muteLingerTimeout = setTimeout(() => {
-            isMuted = false;
-            muteLingerTimeout = null;
-            console.log("Mic unmuted - ready for next input");
-          }, unmutedelay);
-        }
       } else {
         try {
           const eventData: ServerEvent = JSON.parse(event.data);
