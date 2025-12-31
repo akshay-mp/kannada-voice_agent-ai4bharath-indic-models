@@ -1,126 +1,78 @@
-# Voice Sandwich Demo 🥪
+# Kannada Voice Agent (Generic)
 
-A real-time, voice-to-voice AI pipeline demo featuring a sandwich shop order assistant. **Migrated to use ElevenLabs for both Speech-to-Text (STT) & Text-to-Speech (TTS), and Google Gemini for the Agent.**
+A "Voice Sandwich" architecture for a Kannada Generic Voice Agent. This pipeline integrates Voice Activity Detection (VAD), Speech-to-Text (STT), Translation (Indic↔English), LLM Agent (Gemini), and Text-to-Speech (TTS).
 
-## Architecture
+## 🏗️ Architecture
 
-The pipeline processes audio through three transform stages using async generators with a producer-consumer pattern:
+The pipeline follows a **Voice Sandwich** pattern:
 
-```mermaid
-flowchart LR
-    subgraph Client [Browser]
-        Mic[🎤 Microphone] -->|PCM Audio| WS_Out[WebSocket]
-        WS_In[WebSocket] -->|Audio + Events| Speaker[🔊 Speaker]
-    end
+1.  **VAD (Silero)**: Detects voice activity in the audio stream.
+2.  **STT (IndicConformer)**: Transcribes Kannada audio to Kannada text.
+3.  **Translation (IndicTrans2)**: Translates Kannada text to English.
+4.  **Agent (Gemini)**: Processes the English query and generates an English response.
+5.  **Translation (IndicTrans2)**: Translates the English response back to Kannada.
+6.  **TTS (IndicF5)**: Synthesizes Kannada audio from the translated text.
 
-    subgraph Server [Python]
-        WS_Receiver[WS Receiver] --> Pipeline
+### Microservices (Modal)
+The heavy lifting (AI Models) is hosted on [Modal](https://modal.com/) as serverless microservices:
+- **STT**: `src/modal_indicconformer.py` (AI4Bharat IndicConformer)
+- **Translation**:
+    - `src/modal_indictrans2.py` (Indic → English)
+    - `src/modal_indictrans2_en_indic.py` (English → Indic)
+- **TTS**: `src/modal_indicf5.py` (IndicF5)
 
-        subgraph Pipeline [Voice Agent Pipeline]
-            direction LR
-            STT[ElevenLabs STT] -->|Transcripts| Agent[Google Gemini Agent]
-            Agent -->|Text Chunks| TTS[ElevenLabs TTS]
-        end
+## �️ Modal Skills (Pre-configured)
+This repository includes a `skills/` directory containing **standalone, reusable skills** for deploying each model to Modal. These can be used as references or starting points for isolated deployments:
+- `skills/modal-indicconformer-stt/`
+- `skills/modal-indictrans2-translation/`
+- `skills/modal-indictrans2-en-indic-translation/`
+- `skills/modal-indicf5-tts/`
 
-        Pipeline -->|Events| WS_Sender[WS Sender]
-    end
+## �🚀 Deployment
 
-    WS_Out --> WS_Receiver
-    WS_Sender --> WS_In
+### Prerequisites
+- [Modal](https://modal.com/) account and CLI installed (`pip install modal`).
+- [uv](https://github.com/astral-sh/uv) (recommended) or Python 3.10+.
+- `.env` file with `GOOGLE_API_KEY` (for Gemini) and `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET`.
+
+### Deploy Models to Modal
+Run the deployment script to deploy all microservices:
+```powershell
+./deploy_models.ps1
+```
+Or deploy individually:
+```bash
+modal deploy src/modal_indicconformer.py
+modal deploy src/modal_indicf5.py
+modal deploy src/modal_indictrans2.py
+modal deploy src/modal_indictrans2_en_indic.py
 ```
 
-### Pipeline Stages
-
-1. **STT Stage** (`_stt_stream`): Streams audio to **ElevenLabs Scribe**, yields transcription events (`stt_chunk`, `stt_output`).
-2. **Agent Stage** (`_agent_stream`): Invokes **Google Gemini** agent on final transcripts, yields agent responses (`agent_chunk`, `tool_call`, `tool_result`, `agent_end`).
-3. **TTS Stage** (`_tts_stream`): Sends agent text to **ElevenLabs TTS**, yields audio events (`tts_chunk`).
-
-### Additional Features
-
-#### Long-term Memory
-The agent persists user preferences using a local SQLite database (`voice_agent.db`). This allows the agent to remember details like dietary restrictions across sessions.
-
-#### Observability
-- **Request Logging**: `src/middleware.py` provides structured logging for all HTTP requests.
-- **Event Tracing**: All pipeline events are logged for debugging.
-
-## Prerequisites
-
-- **Python** (3.11+)
-- **uv** (Python package manager)
-- **Node.js** (for frontend build only)
-
-### API Keys
-
-| Service | Environment Variable | Purpose |
-|---------|---------------------|---------|
-| ElevenLabs | `ELEVENLABS_API_KEY` | Speech-to-Text & Text-to-Speech |
-| Google | `GOOGLE_API_KEY` | LangChain Agent (Gemini) |
-
-## Quick Start
-
-### Python Backend
-
-1.  **Install Dependencies**:
-    ```bash
-    # Make sure you are in the root directory
-    uv sync
-    ```
-
-2.  **Build Frontend**:
-    ```bash
-    cd web
-    pnpm install && pnpm build
-    cd ..
-    ```
-
-3.  **Run Server**:
-    ```bash
-    uv run src/main.py
-    ```
-
-    The app will be available at `http://localhost:8000`
-
-## Project Structure
-
-```
-.
-├── web/                 # Svelte frontend
-├── src/                 # Python backend source
-│   ├── main.py             # Main server & pipeline
-│   ├── elevenlabs_stt.py   # ElevenLabs Real-time STT
-│   ├── elevenlabs_tts.py   # ElevenLabs Real-time TTS
-│   ├── events.py           # Event type definitions
-│   ├── memory.py           # SQLite memory manager
-│   ├── logger.py           # Application logger
-│   ├── middleware.py       # API request logging
-│   ├── test_stt.py         # STT unit tests
-│   ├── test_tts.py         # TTS unit tests
-│   └── utils.py
-├── pyproject.toml       # Project dependencies
-└── uv.lock
+### Cold Start (Warmup)
+To ensure low latency, warm up the serverless containers before use:
+```powershell
+./cold_start_models.ps1
 ```
 
-## Event Types
+## 🏃 Running the Voice Agent
 
-The pipeline communicates via a unified event stream:
+### 1. Install Dependencies
+```bash
+uv pip install -r requirements_voice_agent.txt
+```
 
-| Event | Direction | Description |
-|-------|-----------|-------------|
-| `stt_chunk` | STT → Client | Partial transcription (real-time feedback) |
-| `stt_output` | STT → Agent | Final transcription |
-| `agent_chunk` | Agent → TTS | Text chunk from agent response |
-| `tool_call` | Agent → Client | Tool invocation |
-| `tool_result` | Agent → Client | Tool execution result |
-| `agent_end` | Agent → TTS | Signals end of agent turn |
+### 2. Start the Server
+Run the local voice agent server (FastAPI + WebSocket):
+```bash
+uv run python -m src.voice_agent.main
+```
+The server will start at `http://localhost:8000` (or similar).
 
-## Acknowledgements
+### 3. Client Interaction
+The agent exposes a WebSocket endpoint (typically `/ws`) for real-time audio streaming.
+- **Frontend**: A Svelte/Vite frontend (in `src/web`) connects to this WebSocket to capture microphone input and play back response audio.
 
-This project is a fork of the [Voice Sandwich Demo](https://github.com/langchain-ai/voice-sandwich-demo) by LangChain AI.
-
-### Modifications from Original
-We have adapted the original demo to create a streamlined, **pure ElevenLabs implementation**:
-- **STT Migration**: Replaced AssemblyAI with **ElevenLabs Scribe v2** (Real-time STT).
-- **TTS Migration**: Replaced Cartesia with **ElevenLabs TTS**.
-- **Simplified Structure**: Flattened the project layout (merging `components/python` into the root) for easier deployment and management with `uv`.
-- **Dependency Optimization**: Removed unused dependencies to focus solely on the ElevenLabs + Gemini tech stack.
+## 📂 Project Structure
+- `src/voice_agent/`: Core logic for the local agent (Pipeline, VAD, Client logic).
+- `src/modal/`: Modal microservice definitions for the AI models.
+- `src/web/`: Frontend application.

@@ -1,0 +1,13 @@
+# Voice Agent Dependencies
+fastapi[standard]
+uvicorn
+websockets
+httpx
+torch
+torchaudio
+google-genai
+pyaudio
+
+python-dotenv
+langchain-openai
+modal
