@@ -121,6 +121,16 @@ class TTSChunkEvent(VoiceAgentEvent):
         return cls(audio=audio)
 
 
+@dataclass
+class TTSCompleteEvent(VoiceAgentEvent):
+    """Signal that TTS generation is complete for this turn."""
+    type: Literal["tts_complete"] = "tts_complete"
+
+    @classmethod
+    def create(cls) -> "TTSCompleteEvent":
+        return cls()
+
+
 def event_to_dict(event: VoiceAgentEvent) -> dict:
     """Convert event to dictionary for JSON serialization."""
     data = {
@@ -155,5 +165,7 @@ def event_to_dict(event: VoiceAgentEvent) -> dict:
     elif isinstance(event, TTSChunkEvent):
         # Audio bytes are sent separately, not in JSON
         data["audio_length"] = len(event.audio)
+    elif isinstance(event, TTSCompleteEvent):
+        pass
     
     return data

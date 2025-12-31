@@ -14,10 +14,10 @@ app = modal.App("indicf5-tts")
 # Model configuration
 MODEL_ID = "ai4bharat/IndicF5"
 MODEL_DIR = "/model"
-REF_AUDIO_URL = "https://raw.githubusercontent.com/AI4Bharat/IndicF5/main/prompts/PAN_F_HAPPY_00001.wav"
+REF_AUDIO_URL = "https://raw.githubusercontent.com/AI4Bharat/IndicF5/main/prompts/KAN_F_HAPPY_00001.wav"
 REF_AUDIO_PATH = "/model/default_ref.wav"
-# Transcript for the default reference audio (Punjabi)
-REF_TEXT_DEFAULT = "ਭਹੰਪੀ ਵਿੱਚ ਸਮਾਰਕਾਂ ਦੇ ਭਵਨ ਨਿਰਮਾਣ ਕਲਾ ਦੇ ਵੇਰਵੇ ਗੁੰਝਲਦਾਰ ਅਤੇ ਹੈਰਾਨ ਕਰਨ ਵਾਲੇ ਹਨ, ਜੋ ਮੈਨੂੰ ਖੁਸ਼ ਕਰਦੇ  ਹਨ।"
+# Transcript for the default reference audio (Kannada)
+REF_TEXT_DEFAULT = "ನಮ್‌ ಫ್ರಿಜ್ಜಲ್ಲಿ ಕೂಲಿಂಗ್‌ ಸಮಸ್ಯೆ ಆಗಿ ನಾನ್‌ ಭಾಳ ದಿನದಿಂದ ಒದ್ದಾಡ್ತಿದ್ದೆ, ಆದ್ರೆ ಅದ್ನೀಗ ಮೆಕಾನಿಕ್ ಆಗಿರೋ ನಿಮ್‌ ಸಹಾಯ್ದಿಂದ ಬಗೆಹರಿಸ್ಕೋಬೋದು ಅಂತಾಗಿ ನಿರಾಳ ಆಯ್ತು ನಂಗೆ."
 
 def download_setup():
     """Download model and default reference audio."""

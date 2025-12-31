@@ -63,7 +63,7 @@ async def websocket_endpoint(websocket: WebSocket):
         """Async generator that yields audio from queue."""
         while True:
             try:
-                chunk = await asyncio.wait_for(audio_queue.get(), timeout=30.0)
+                chunk = await asyncio.wait_for(audio_queue.get(), timeout=120.0)
                 yield chunk
             except asyncio.TimeoutError:
                 break

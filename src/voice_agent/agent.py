@@ -1,10 +1,12 @@
 """
 Voice Agent Implementation
-Uses Nebius AI (Qwen) via LangChain OpenAI.
+Uses Nebius AI (Qwen) via LangChain OpenAI with Tavily Search.
 """
 import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
+from langgraph.prebuilt import create_react_agent
 
 load_dotenv()
 
@@ -17,10 +19,24 @@ llm = ChatOpenAI(
     streaming=True,
 )
 
+# Initialize Search Tool
+search_tool = TavilySearch(max_results=3)
+tools = [search_tool]
+
+# System prompt for the agent
+SYSTEM_PROMPT = """You are a helpful assistant. You can use the search tool to find information.
+If you need to search for current events or specific data, use the search tool.
+Answer concisely only based on the search results you get.
+Always answer in plain English without formatting the response.
+IMPORTANT: Convert all numbers to their word equivalent (e.g., say 'eleven' instead of '11', 'twenty five' instead of '25')."""
+
+# Create React Agent using langgraph with prompt parameter
+agent_executor = create_react_agent(llm, tools, prompt=SYSTEM_PROMPT)
+
 
 async def run_agent(user_query: str) -> str:
     """
-    Run Nebius agent.
+    Run Agent with Search capabilities.
     
     Args:
         user_query: User's question in English
@@ -29,12 +45,14 @@ async def run_agent(user_query: str) -> str:
         Agent's response text
     """
     try:
-        # Run agent
-        response = await llm.ainvoke(user_query)
+        # Run agent executor
+        result = await agent_executor.ainvoke({"messages": [("user", user_query)]})
         
-        # Extract text response
-        if response.content:
-            return response.content
+        # Extract text response from the last message
+        if "messages" in result and result["messages"]:
+            last_message = result["messages"][-1]
+            if hasattr(last_message, "content"):
+                return last_message.content
         
         return "I couldn't find an answer to that question."
         
@@ -54,10 +72,13 @@ def run_agent_sync(user_query: str) -> str:
         Agent's response text
     """
     try:
-        response = llm.invoke(user_query)
+        result = agent_executor.invoke({"messages": [("user", user_query)]})
         
-        if response.content:
-            return response.content
+        # Extract text response from the last message
+        if "messages" in result and result["messages"]:
+            last_message = result["messages"][-1]
+            if hasattr(last_message, "content"):
+                return last_message.content
         
         return "I couldn't find an answer to that question."
         

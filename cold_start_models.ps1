@@ -1,15 +1,27 @@
 Write-Host " Cold Starting Models (This may take a few minutes if they are scaling up)..."
 
-Write-Host "1️ Warming up IndicConformer STT..."
-uv run python src/test_indicconformer.py
+$models = @(
+    @{ Name = "IndicConformer STT"; Path = "src/modal/test_indicconformer.py" },
+    @{ Name = "IndicTrans2 (Indic -> English)"; Path = "src/modal/test_indictrans2.py" },
+    @{ Name = "IndicTrans2 (English -> Indic)"; Path = "src/modal/test_indictrans2_en_indic.py" },
+    @{ Name = "IndicF5 TTS"; Path = "src/modal/test_indicf5.py" }
+)
 
-Write-Host "2️ Warming up IndicTrans2 (Indic -> English)..."
-uv run python src/test_indictrans2.py
+$jobs = @()
 
-Write-Host "3️ Warming up IndicTrans2 (English -> Indic)..."
-uv run python src/test_indictrans2_en_indic.py
+$models | ForEach-Object {
+    $model = $_
+    Write-Host "🚀 Starting warmup for $($model.Name)..."
+    $jobs += Start-Job -ScriptBlock {
+        param($name, $path)
+        Write-Output "⏳ Warming up $name..."
+        uv run python $path
+        Write-Output "✅ $name warmed up!"
+    } -ArgumentList $model.Name, $model.Path
+}
 
-Write-Host "4️ Warming up IndicF5 TTS..."
-uv run python src/test_indicf5.py
+Write-Host "Waiting for all models to warm up..."
+$jobs | Wait-Job | Receive-Job
+
 
 Write-Host " All models checked and warmed up!"
