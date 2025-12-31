@@ -80,7 +80,34 @@ The server will start at `http://localhost:8000` (or similar).
 The agent exposes a WebSocket endpoint (typically `/ws`) for real-time audio streaming.
 - **Frontend**: A Svelte/Vite frontend (in `src/web`) connects to this WebSocket to capture microphone input and play back response audio.
 
+### 4. Running the Frontend
+To start the web interface:
+
+1.  Navigate to the web directory:
+    ```bash
+    cd src/web
+    ```
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+3.  Run in development mode:
+    ```bash
+    npm run dev
+    ```
+    The app will typically run at `http://localhost:5173`.
+
+#### Compiling for Production
+To build the static assets for production deployment:
+```bash
+npm run build
+```
+This will compile the TypeScript and Svelte code into the `dist/` directory.
+
 ## 📂 Project Structure
 - `src/voice_agent/`: Core logic for the local agent (Pipeline, VAD, Client logic).
 - `src/modal/`: Modal microservice definitions for the AI models.
 - `src/web/`: Frontend application.
+
+## 🙏 Acknowledgements
+This project's "Voice Sandwich" concept is originally based on the [voice-sandwich-demo](https://github.com/langchain-ai/voice-sandwich-demo) by LangChain AI. It has been modified and adapted to support Kannada Voice Agents using Indian-specific models (IndicConformer, IndicTrans2, IndicF5).
