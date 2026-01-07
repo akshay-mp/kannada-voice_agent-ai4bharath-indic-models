@@ -42,26 +42,30 @@ export function createVoiceSession(): VoiceSession {
 
     switch (event.type) {
       case "user_input":
-        // MUTE MIC IMMEDIATELY
+        // Fallback or deprecated - used if we did local VAD
         isMuted = true;
-        ttsComplete = false; // Reset state for new turn
-        if (muteLingerTimeout) {
-          clearTimeout(muteLingerTimeout);
-          muteLingerTimeout = null;
-        }
+        currentTurn.startTurn(event.ts);
+        break;
 
-        // Always start new turn on VAD start (Audio Received)
+      case "processing_start":
+        // Server VAD trigger
+        isMuted = true;
+        if (muteLingerTimeout) clearTimeout(muteLingerTimeout);
+        // Start a new turn
+        const now = Date.now();
         const prevTurn = get(currentTurn);
-        if (prevTurn.active) {
-          if (prevTurn.turnStartTs) {
-            waterfallData.set({ ...prevTurn });
-          }
+        if (prevTurn.active && prevTurn.turnStartTs) {
+          waterfallData.set({ ...prevTurn });
         } else if (prevTurn.turnStartTs) {
           waterfallData.set({ ...prevTurn });
         }
+        currentTurn.startTurn(now);
+        console.log("Turn Started (Server VAD)");
+        break;
 
-        currentTurn.startTurn(event.ts);
-        console.log("Turn Started (User Input):", event.ts);
+      case "timings":
+        // Apply precise server timings
+        currentTurn.applyTimings(event.data);
         break;
 
       case "tts_complete":

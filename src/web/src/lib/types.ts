@@ -26,7 +26,19 @@ export type ServerEvent =
     direction: "indic_to_en" | "en_to_indic";
   }
   | { type: "tts_chunk"; audio_length: number; ts: number }
-  | { type: "tts_complete"; ts: number };
+  | { type: "tts_complete"; ts: number }
+  | { type: "processing_start" }
+  | {
+    type: "timings";
+    data: {
+      stt: number;
+      trans_in: number;
+      agent: number;
+      trans_out: number;
+      tts: number;
+      total: number;
+    }
+  };
 
 // Session state
 export interface SessionState {

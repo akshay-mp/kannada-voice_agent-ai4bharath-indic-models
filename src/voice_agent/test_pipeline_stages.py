@@ -1,122 +1,142 @@
 """
-Test script to verify individual voice agent pipeline stages.
+Test script to verify the unified voice agent pipeline.
+Tests the consolidated Modal endpoint: unified-voice-agent
 """
 import asyncio
+import base64
 import os
-import sys
+import time
 
-# Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+import httpx
 
-from src.voice_agent import stt_client, translation_client, tts_client, agent
+# Unified endpoint
+UNIFIED_ENDPOINT = "https://akshaymp-1810--unified-voice-agent-unifiedvoiceagent-process.modal.run"
+HEALTH_ENDPOINT = "https://akshaymp-1810--unified-voice-agent-unifiedvoiceagent-health.modal.run"
 
-async def test_stt():
-    print("\n🎤 Testing STT Client...")
-    try:
-        # Use sample audio if available, otherwise skip
-        audio_path = "sample_audio.wav"
-        if os.path.exists(audio_path):
-            with open(audio_path, "rb") as f:
-                audio_bytes = f.read()
-            text = await stt_client.transcribe(audio_bytes)
-            print(f"✅ STT Result: {text}")
-        else:
-            print(f"⚠️ {audio_path} not found, skipping STT test")
-    except Exception as e:
-        print(f"❌ STT Failed: {e}")
 
-async def test_translation():
-    print("\n🔄 Testing Translation Client...")
-    try:
-        # Indic to English
-        kannada_text = "ನಮಸ್ಕಾರ, ಹೇಗಿದ್ದೀರಾ?"  # Hello, how are you?
-        en_text = await translation_client.translate_indic_to_english(kannada_text)
-        print(f"✅ Indic->En: '{kannada_text}' -> '{en_text}'")
-        
-        # English to Indic
-        english_text = "I am fine, thank you."
-        kn_text = await translation_client.translate_english_to_indic(english_text)
-        print(f"✅ En->Indic: '{english_text}' -> '{kn_text}'")
-    except Exception as e:
-        print(f"❌ Translation Failed: {e}")
+async def test_health():
+    """Test health endpoint."""
+    print("\n💚 Testing Health Endpoint...")
+    async with httpx.AsyncClient(timeout=60) as client:
+        try:
+            resp = await client.get(HEALTH_ENDPOINT)
+            resp.raise_for_status()
+            print(f"✅ Health: {resp.json()}")
+        except Exception as e:
+            print(f"❌ Health Failed: {e}")
 
-async def test_agent():
-    print("\n🤖 Testing Gemini Agent...")
-    try:
-        query = "What is the capital of Karnataka?"
-        response = await agent.run_agent(query)
-        print(f"✅ Agent Response: {response[:100]}...")
-    except Exception as e:
-        print(f"❌ Agent Failed: {e}")
 
-async def test_tts():
-    print("\n🔊 Testing TTS Client...")
-    try:
-        text = "ನಮಸ್ಕಾರ, ಇದು ಧ್ವನಿ ಪರೀಕ್ಷೆ." # Hello, this is a voice test.
-        audio_bytes = await tts_client.synthesize(text)
-        print(f"✅ TTS Generated {len(audio_bytes)} bytes")
-        # Save to file
-        with open("test_output.wav", "wb") as f:
-            f.write(audio_bytes)
-        print("✅ Saved to test_output.wav")
-    except Exception as e:
-        print(f"❌ TTS Failed: {e}")
-
-async def test_full_pipeline():
-    print("\n🔗 Testing Full End-to-End Pipeline (STT -> Trans -> Agent -> Trans -> TTS)...")
-    try:
-        # 1. STT
-        audio_path = "sample_audio.wav"
-        if not os.path.exists(audio_path):
-            print(f"⚠️ {audio_path} not found, using fallback text for pipeline test")
-            stt_text = "ಬೆಂಗಳೂರಿನ ಹವಾಮಾನ ಹೇಗಿದೆ?" # How is weather in Bangalore?
-        else:
-            with open(audio_path, "rb") as f:
-                audio_bytes = f.read()
-            print("1️⃣ Transcribing audio...")
-            stt_text = await stt_client.transcribe(audio_bytes)
-        
-        print(f"   STT Output: {stt_text}")
-
-        # 2. Indic -> En
-        print("2️⃣ Translating to English...")
-        en_text = await translation_client.translate_indic_to_english(stt_text)
-        print(f"   English Query: {en_text}")
-
-        # 3. Agent
-        print("3️⃣ Querying Agent...")
-        agent_resp = await agent.run_agent(en_text)
-        print(f"   Agent Response: {agent_resp[:100]}...")
-
-        # 4. En -> Indic
-        print("4️⃣ Translating to Kannada...")
-        kn_resp = await translation_client.translate_english_to_indic(agent_resp)
-        print(f"   Kannada Response: {kn_resp[:100]}...")
-
-        # 5. TTS
-        print("5️⃣ Synthesizing Speech...")
-        audio = await tts_client.synthesize(kn_resp)
-        print(f"✅ Full Pipeline Success! Output audio: {len(audio)} bytes")
-        
-        with open("full_pipeline_output.wav", "wb") as f:
-            f.write(audio)
+async def test_unified_pipeline():
+    """Test the full unified pipeline: Audio -> STT -> Trans -> Agent -> Trans -> TTS -> Audio"""
+    print("\n🔗 Testing Full Unified Pipeline...")
+    
+    audio_path = "sample_audio.wav"
+    if not os.path.exists(audio_path):
+        print(f"❌ {audio_path} not found!")
+        return
+    
+    # Load and encode audio
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    print(f"📂 Loaded audio: {len(audio_bytes)} bytes")
+    
+    payload = {
+        "audio_b64": audio_b64,
+        "language": "kn",
+        "src_lang": "kan_Knda",
+        "tgt_lang": "kan_Knda",
+    }
+    
+    async with httpx.AsyncClient(timeout=180) as client:
+        try:
+            print("⏳ Sending to unified endpoint (may take ~90s on cold start)...")
+            t0 = time.perf_counter()
+            resp = await client.post(UNIFIED_ENDPOINT, json=payload)
+            total_time = time.perf_counter() - t0
+            resp.raise_for_status()
+            result = resp.json()
             
-    except Exception as e:
-        print(f"❌ Full Pipeline Failed: {e}")
-        raise e
+            print(f"\n✅ Pipeline Success! (Total: {total_time:.1f}s)")
+            print(f"   📝 Transcription: {result.get('transcription', 'N/A')}")
+            print(f"   🔄 Translated (En): {result.get('translated_en', 'N/A')}")
+            print(f"   🤖 Agent Response: {result.get('agent_response_en', 'N/A')[:50]}...")
+            print(f"   🔄 Response (Indic): {result.get('response_indic', 'N/A')[:50]}...")
+            print(f"   ⏱️ Timings: {result.get('timings', {})}")
+            
+            # Save output audio
+            audio_out_b64 = result.get("audio_b64")
+            if audio_out_b64:
+                audio_out = base64.b64decode(audio_out_b64)
+                with open("unified_output.wav", "wb") as f:
+                    f.write(audio_out)
+                print(f"   🔊 Saved output audio: unified_output.wav ({len(audio_out)} bytes)")
+                
+        except httpx.TimeoutException:
+            print("❌ Request timed out (>180s). Service may be cold starting.")
+        except Exception as e:
+            print(f"❌ Pipeline Failed: {e}")
+
+
+async def benchmark_unified(iterations: int = 3):
+    """Benchmark the unified pipeline."""
+    print(f"\n� Benchmarking ({iterations} iterations)...")
+    
+    audio_path = "sample_audio.wav"
+    if not os.path.exists(audio_path):
+        print(f"❌ {audio_path} not found!")
+        return
+    
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    
+    payload = {
+        "audio_b64": audio_b64,
+        "language": "kn",
+        "src_lang": "kan_Knda",
+        "tgt_lang": "kan_Knda",
+    }
+    
+    timings_list = []
+    
+    async with httpx.AsyncClient(timeout=180) as client:
+        for i in range(iterations):
+            try:
+                t0 = time.perf_counter()
+                resp = await client.post(UNIFIED_ENDPOINT, json=payload)
+                client_time = (time.perf_counter() - t0) * 1000
+                resp.raise_for_status()
+                result = resp.json()
+                
+                server_timings = result.get("timings", {})
+                timings_list.append({
+                    "client_total_ms": client_time,
+                    **server_timings,
+                })
+                print(f"   Iteration {i+1}: {server_timings}")
+            except Exception as e:
+                print(f"   ❌ Iteration {i+1} failed: {e}")
+    
+    if timings_list:
+        print("\n📈 Summary:")
+        for key in timings_list[0].keys():
+            values = [t[key] for t in timings_list if key in t]
+            if values:
+                avg = sum(values) / len(values)
+                print(f"   {key}: avg={avg:.0f}ms, min={min(values):.0f}ms, max={max(values):.0f}ms")
+
 
 async def main():
-    print("🚀 Starting Pipeline Tests...")
-    # Individual integrity checks
-    await test_stt()
-    await test_translation()
-    await test_agent()
-    await test_tts()
+    print("🚀 Unified Voice Agent Pipeline Tests")
+    print("=" * 50)
     
-    # Full integration check
-    await test_full_pipeline()
+    await test_health()
+    await test_unified_pipeline()
+    await benchmark_unified(iterations=3)
     
     print("\n✨ All tests completed!")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

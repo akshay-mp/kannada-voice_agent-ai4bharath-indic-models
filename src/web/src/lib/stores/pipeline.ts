@@ -89,6 +89,33 @@ function createTurnStore() {
       update((t) => ({ ...t, active: false }));
     },
 
+    applyTimings(timings: { stt: number; trans_in: number; agent: number; trans_out: number; tts: number; total: number }) {
+      update((t) => {
+        if (!t.turnStartTs) return t;
+        const start = t.turnStartTs;
+        // Convert seconds to ms
+        const sttEnd = start + timings.stt * 1000;
+        const trans1End = sttEnd + timings.trans_in * 1000;
+        const agentEnd = trans1End + timings.agent * 1000;
+        const trans2End = agentEnd + timings.trans_out * 1000;
+        const ttsEnd = trans2End + timings.tts * 1000;
+
+        return {
+          ...t,
+          sttStartTs: start,
+          sttEndTs: sttEnd,
+          trans1StartTs: sttEnd,
+          trans1EndTs: trans1End,
+          agentStartTs: trans1End,
+          agentEndTs: agentEnd,
+          trans2StartTs: agentEnd,
+          trans2EndTs: trans2End,
+          ttsStartTs: trans2End,
+          ttsEndTs: ttsEnd,
+        };
+      });
+    },
+
     reset() {
       set(initialTurnState);
     },
